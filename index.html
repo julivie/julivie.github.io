@@ -134,10 +134,11 @@ radial-gradient(circle at 10% 78%,rgba(255,245,208,.96) 0 1px,rgba(255,218,145,.
 /* Быстрая навигация внутри главы, без влияния на читательский прогресс. */
 .reader-jump{position:fixed;right:max(10px,env(safe-area-inset-right));bottom:calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;z-index:35;pointer-events:none;opacity:0;visibility:hidden;transform:translateX(7px);transition:opacity .28s ease,visibility .28s ease,transform .28s ease}
 .reader-jump.is-visible.is-awake{opacity:.78;visibility:visible;pointer-events:auto;transform:translateX(0)}
+body:has(#reader:not(.hidden)) .reader-jump.is-awake{visibility:visible;opacity:.8;pointer-events:auto;transform:translateX(0)}
 .reader-jump.is-visible.is-awake:hover,.reader-jump.is-visible.is-awake:focus-within{opacity:1}
 .reader-jump button{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(232,198,128,.52);background:rgba(9,20,38,.62);color:#f3dba4;box-shadow:0 3px 12px #0005;font:500 19px/1 Georgia,serif;cursor:pointer;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);touch-action:manipulation}
 .reader-jump button:active{transform:scale(.94)}.reader-jump button:focus-visible{outline:2px solid #fff;outline-offset:3px}
-@media(max-width:600px){.reader-jump{right:max(7px,env(safe-area-inset-right));bottom:calc(38px + env(safe-area-inset-bottom));gap:7px}.reader-jump button{width:34px;height:34px;font-size:18px;background:rgba(9,20,38,.56)}}
+@media(max-width:600px){.reader-jump{position:fixed;right:calc(22px + env(safe-area-inset-right,0px));bottom:calc(100px + env(safe-area-inset-bottom,0px));gap:8px;z-index:2147483000}.reader-jump button{width:38px;height:38px;font-size:20px;background:rgba(9,20,38,.82);border-color:rgba(232,198,128,.8)}}
 @media(prefers-reduced-motion:reduce){.reader-jump{transition:none}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/><link href="https://fonts.googleapis.com/css2?family=Marck+Script&display=swap" rel="stylesheet"/></head>
@@ -367,7 +368,7 @@ document.addEventListener('keydown',e=>{if(overlay.hidden)return;if(e.key==='Esc
 
 })();
 </script><nav id="readerJump" class="reader-jump" aria-label="Быстрая прокрутка главы" aria-hidden="true"><button id="jumpChapterTop" type="button" aria-label="К началу главы" title="К началу главы">↑</button><button id="jumpChapterBottom" type="button" aria-label="К концу главы" title="К концу главы">↓</button></nav><script>
-/* Small, translucent navigation arrows: appear during chapter scrolling and fade after inactivity. */
+/* Mobile-friendly chapter navigation: visible on touch/scroll and auto-hides when idle. */
 (()=>{
   const nav=document.getElementById('readerJump');
   const reader=document.getElementById('reader');
@@ -375,29 +376,40 @@ document.addEventListener('keydown',e=>{if(overlay.hidden)return;if(e.key==='Esc
   const bottom=document.getElementById('jumpChapterBottom');
   if(!nav||!reader||!top||!bottom)return;
   let hideTimer;
+  const mobile=()=>window.matchMedia('(max-width: 600px), (pointer: coarse)').matches;
   const inReader=()=>!reader.classList.contains('hidden');
-  function hide(){
-    nav.classList.remove('is-awake');
-    top.tabIndex=bottom.tabIndex=-1;
+  const cookieOpen=()=>{const o=document.getElementById('fortuneOverlay');return !!o&&!o.hidden};
+  function hide(){nav.classList.remove('is-awake');top.tabIndex=bottom.tabIndex=-1;}
+  function scheduleHide(){
+    clearTimeout(hideTimer);
+    hideTimer=setTimeout(()=>{
+      if(nav.matches(':focus-within')||(!mobile()&&nav.matches(':hover'))){scheduleHide();return;}
+      hide();
+    },1800);
+  }
+  function reveal(){
+    if(!inReader()||cookieOpen())return;
+    nav.classList.add('is-visible','is-awake');
+    nav.setAttribute('aria-hidden','false');
+    top.tabIndex=bottom.tabIndex=0;
+    scheduleHide();
   }
   function sync(){
     const visible=inReader();
     nav.classList.toggle('is-visible',visible);
     nav.setAttribute('aria-hidden',String(!visible));
     if(!visible){clearTimeout(hideTimer);hide();}
-  }
-  function reveal(){
-    if(!inReader()||document.getElementById('fortuneOverlay')?.hidden===false)return;
-    nav.classList.add('is-visible','is-awake');
-    top.tabIndex=bottom.tabIndex=0;
-    clearTimeout(hideTimer);
-    hideTimer=setTimeout(()=>{if(!nav.matches(':focus-within')&&!nav.matches(':hover'))hide();else hideTimer=setTimeout(hide,1800)},1800);
+    else if(mobile())requestAnimationFrame(reveal);
   }
   new MutationObserver(sync).observe(reader,{attributes:true,attributeFilter:['class']});
   window.addEventListener('scroll',reveal,{passive:true});
-  nav.addEventListener('pointerenter',()=>clearTimeout(hideTimer));
-  nav.addEventListener('pointerleave',()=>{clearTimeout(hideTimer);hideTimer=setTimeout(hide,1200)});
-  nav.addEventListener('focusout',()=>{clearTimeout(hideTimer);hideTimer=setTimeout(hide,1200)});
+  // iOS Safari may coalesce scroll events during inertial touch scrolling.
+  reader.addEventListener('touchstart',reveal,{passive:true});
+  reader.addEventListener('touchmove',reveal,{passive:true});
+  if(window.visualViewport)window.visualViewport.addEventListener('scroll',reveal,{passive:true});
+  nav.addEventListener('pointerenter',()=>{if(!mobile())clearTimeout(hideTimer)});
+  nav.addEventListener('pointerleave',scheduleHide);
+  nav.addEventListener('focusout',scheduleHide);
   const behavior=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
   top.addEventListener('click',()=>{window.scrollTo({top:0,behavior:behavior()});reveal()});
   bottom.addEventListener('click',()=>{window.scrollTo({top:document.documentElement.scrollHeight-window.innerHeight,behavior:behavior()});reveal()});
