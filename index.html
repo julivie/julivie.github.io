@@ -130,6 +130,15 @@ radial-gradient(circle at 10% 78%,rgba(255,245,208,.96) 0 1px,rgba(255,218,145,.
 @keyframes fc-break-left{to{transform:translate(-14px,9px) rotate(-28deg)}}@keyframes fc-break-right{to{transform:translate(14px,9px) rotate(28deg)}}@keyframes fc-sparks{0%{opacity:0;transform:translate(0,0) scale(.4)}20%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.15)}}@keyframes fc-paper-open{0%{opacity:.3;transform:translateY(-70px) scaleY(.06)}45%{opacity:1}100%{opacity:1;transform:translateY(-8px) scaleY(1)}}@keyframes fc-show{to{opacity:1}}@keyframes fc-twinkle{from{opacity:.3}to{opacity:.9}}
 @media(max-height:630px){.fc-panel{padding:17px 17px 12px}.fc-cookie-stage{height:105px}.fc-cookie-half{top:-3px;transform:scale(.7)}.fc-paper{padding:12px 17px;min-height:80px;margin-bottom:5px}.fc-eyebrow{font-size:23px}}
 @media(prefers-reduced-motion:reduce){.fc-cookie-left{animation:none;transform:translate(-14px,9px) rotate(-28deg)}.fc-cookie-right{animation:none;transform:translate(14px,9px) rotate(28deg)}.fc-spark{display:none}.fc-paper,.fc-actions{animation:none;opacity:1;transform:none}.fc-panel::before{animation:none}}
+
+/* Быстрая навигация внутри главы, без влияния на читательский прогресс. */
+.reader-jump{position:fixed;right:max(10px,env(safe-area-inset-right));bottom:calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;z-index:35;pointer-events:none;opacity:0;visibility:hidden;transform:translateX(7px);transition:opacity .28s ease,visibility .28s ease,transform .28s ease}
+.reader-jump.is-visible.is-awake{opacity:.78;visibility:visible;pointer-events:auto;transform:translateX(0)}
+.reader-jump.is-visible.is-awake:hover,.reader-jump.is-visible.is-awake:focus-within{opacity:1}
+.reader-jump button{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(232,198,128,.52);background:rgba(9,20,38,.62);color:#f3dba4;box-shadow:0 3px 12px #0005;font:500 19px/1 Georgia,serif;cursor:pointer;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);touch-action:manipulation}
+.reader-jump button:active{transform:scale(.94)}.reader-jump button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+@media(max-width:600px){.reader-jump{right:max(7px,env(safe-area-inset-right));bottom:calc(38px + env(safe-area-inset-bottom));gap:7px}.reader-jump button{width:34px;height:34px;font-size:18px;background:rgba(9,20,38,.56)}}
+@media(prefers-reduced-motion:reduce){.reader-jump{transition:none}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/><link href="https://fonts.googleapis.com/css2?family=Marck+Script&display=swap" rel="stylesheet"/></head>
 <body><div class="celestial-map" aria-hidden="true"></div><div class="progress"><div id="progress"></div></div><main class="app"><header class="top"><span class="brand" id="brand" role="button" tabindex="0" aria-label="На главную">✦ Julivie</span><button id="menuBtn" aria-label="Открыть оглавление">☰ Главы</button></header>
@@ -356,5 +365,42 @@ cont.addEventListener('click',()=>dismiss(true));
 overlay.addEventListener('click',e=>{if(e.target===overlay)dismiss(false)});
 document.addEventListener('keydown',e=>{if(overlay.hidden)return;if(e.key==='Escape'){e.preventDefault();dismiss(false)}if(e.key==='Tab'){const nodes=[close,cont];const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
 
+})();
+</script><nav id="readerJump" class="reader-jump" aria-label="Быстрая прокрутка главы" aria-hidden="true"><button id="jumpChapterTop" type="button" aria-label="К началу главы" title="К началу главы">↑</button><button id="jumpChapterBottom" type="button" aria-label="К концу главы" title="К концу главы">↓</button></nav><script>
+/* Small, translucent navigation arrows: appear during chapter scrolling and fade after inactivity. */
+(()=>{
+  const nav=document.getElementById('readerJump');
+  const reader=document.getElementById('reader');
+  const top=document.getElementById('jumpChapterTop');
+  const bottom=document.getElementById('jumpChapterBottom');
+  if(!nav||!reader||!top||!bottom)return;
+  let hideTimer;
+  const inReader=()=>!reader.classList.contains('hidden');
+  function hide(){
+    nav.classList.remove('is-awake');
+    top.tabIndex=bottom.tabIndex=-1;
+  }
+  function sync(){
+    const visible=inReader();
+    nav.classList.toggle('is-visible',visible);
+    nav.setAttribute('aria-hidden',String(!visible));
+    if(!visible){clearTimeout(hideTimer);hide();}
+  }
+  function reveal(){
+    if(!inReader()||document.getElementById('fortuneOverlay')?.hidden===false)return;
+    nav.classList.add('is-visible','is-awake');
+    top.tabIndex=bottom.tabIndex=0;
+    clearTimeout(hideTimer);
+    hideTimer=setTimeout(()=>{if(!nav.matches(':focus-within')&&!nav.matches(':hover'))hide();else hideTimer=setTimeout(hide,1800)},1800);
+  }
+  new MutationObserver(sync).observe(reader,{attributes:true,attributeFilter:['class']});
+  window.addEventListener('scroll',reveal,{passive:true});
+  nav.addEventListener('pointerenter',()=>clearTimeout(hideTimer));
+  nav.addEventListener('pointerleave',()=>{clearTimeout(hideTimer);hideTimer=setTimeout(hide,1200)});
+  nav.addEventListener('focusout',()=>{clearTimeout(hideTimer);hideTimer=setTimeout(hide,1200)});
+  const behavior=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
+  top.addEventListener('click',()=>{window.scrollTo({top:0,behavior:behavior()});reveal()});
+  bottom.addEventListener('click',()=>{window.scrollTo({top:document.documentElement.scrollHeight-window.innerHeight,behavior:behavior()});reveal()});
+  sync();
 })();
 </script></body></html>
